@@ -1,6 +1,9 @@
 (() => {
   const ROOT_ID = "jl-context-meter-root-v06";
-  const EXT_VERSION = "0.6.0-beta";
+  const EXT_VERSION = "1.0.0";
+  const SETTINGS_SCHEMA = 1;
+  const SETTINGS_KEY = "jlcm:settings";
+  const ONBOARDING_KEY = "jlcm:onboarding:v1";
   const CACHE_SCHEMA = 3;
   const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
   const MAX_CACHE_CONVERSATIONS = 30;
@@ -14,7 +17,8 @@
     apiMode:"none", loading:false, lastError:"", lastUrl:location.href,
     lastLatestRefresh:0, initializedConversation:null, cacheUpdatedAt:0, cacheLoaded:false,
     copiedAt:0, lastLoadMs:0, tokenMethod:"等待 Tokenizer", tokenizerVerified:false,
-    tokenizerOrigin:"unknown", tokenizerMs:0, exactTokenCount:false, tokenizerRunFailed:false
+    tokenizerOrigin:"unknown", tokenizerMs:0, exactTokenCount:false, tokenizerRunFailed:false,
+    onboardingVisible:false
   };
 
   function formatNumber(n) {
@@ -38,6 +42,62 @@
   function storageGet(area,keys){ return new Promise(r=>chrome.storage[area].get(keys,r)); }
   function storageSet(area,data){ return new Promise(r=>chrome.storage[area].set(data,r)); }
   function storageRemove(area,keys){ return new Promise(r=>chrome.storage[area].remove(keys,r)); }
+
+  function normalizeConfig(raw={}) {
+    const allowed=new Set(["128k","272k","1m","custom"]);
+    const contextPreset=allowed.has(raw.contextPreset)?raw.contextPreset:DEFAULTS.contextPreset;
+    const customContextTokens=Math.max(10000,Number(raw.customContextTokens)||DEFAULTS.customContextTokens);
+    return {
+      contextPreset,
+      customContextTokens,
+      warnPct:60,
+      handoffPct:75,
+      dangerPct:85
+    };
+  }
+
+  async function initSettings(){
+    const legacyKeys=["contextPreset","customContextTokens","warnPct","handoffPct","dangerPct"];
+    const data=await storageGet("sync",[SETTINGS_KEY,ONBOARDING_KEY,...legacyKeys]);
+    const stable=data[SETTINGS_KEY];
+    const legacy={};
+    for(const k of legacyKeys) if(data[k]!==undefined) legacy[k]=data[k];
+
+    // Prefer the stable settings object. If it does not exist yet, migrate the
+    // v0.6.x top-level keys without deleting them, so downgrades still work.
+    const candidate=stable&&typeof stable==="object" ? stable : legacy;
+    state.config=normalizeConfig(candidate);
+
+    const stablePayload={schema:SETTINGS_SCHEMA,...state.config};
+    const stableNeedsWrite=!stable || stable.schema!==SETTINGS_SCHEMA ||
+      stable.contextPreset!==state.config.contextPreset ||
+      Number(stable.customContextTokens)!==state.config.customContextTokens;
+
+    if(stableNeedsWrite){
+      await storageSet("sync",{
+        [SETTINGS_KEY]:stablePayload,
+        ...state.config
+      });
+    }
+
+    state.onboardingVisible=data[ONBOARDING_KEY]!==true;
+  }
+
+  async function saveSettings(){
+    const payload={schema:SETTINGS_SCHEMA,...state.config};
+    // Keep legacy top-level fields alongside the stable object for safe downgrade.
+    await storageSet("sync",{[SETTINGS_KEY]:payload,...state.config});
+  }
+
+  async function dismissOnboarding(){
+    state.onboardingVisible=false;
+    await storageSet("sync",{[ONBOARDING_KEY]:true});
+    const r=document.getElementById(ROOT_ID);
+    if(r){
+      const box=r.querySelector(".jlcm-first-use");
+      if(box) box.hidden=true;
+    }
+  }
 
   function estimateTokens(text) {
     if (!text) return 0; let cjk=0,other=0;
@@ -128,9 +188,17 @@
     const ik="jlcm:v05:index", r=await storageGet("local",[ik]); const arr=(Array.isArray(r[ik])?r[ik]:[]).filter(x=>x.id!==id);
     arr.unshift({id,lastAccess:now}); await storageSet("local",{[ik]:arr}); state.cacheUpdatedAt=now; state.cacheLoaded=true; pruneCacheIndex();
   }
+  function migrateCachePayload(payload){
+    if(!payload||typeof payload!=="object")return null;
+    // v0.5.1–v0.6.2 all use schema 3. Keeping migration centralized prevents
+    // future releases from silently throwing away a compatible cache.
+    if(payload.schema===3&&Array.isArray(payload.messages))return payload;
+    return null;
+  }
+
   async function loadCache(id){
-    if(!id)return false; const r=await storageGet("local",[cacheKey(id)]), p=r[cacheKey(id)];
-    if(!p||p.schema!==CACHE_SCHEMA||!Array.isArray(p.messages))return false;
+    if(!id)return false; const r=await storageGet("local",[cacheKey(id)]), p=migrateCachePayload(r[cacheKey(id)]);
+    if(!p)return false;
     state.messages.clear(); for(const x of p.messages){if(!x?.id)continue;state.messages.set(String(x.id),{id:String(x.id),role:x.role||"",text:null,chars:Number(x.chars)||0,tokens:Number(x.tokens)||0});}
     state.cacheUpdatedAt=Number(p.updatedAt)||0; state.cacheLoaded=true; state.tokenMethod=p.tokenMethod||"快取"; state.tokenizerVerified=Boolean(p.tokenizerVerified); state.exactTokenCount=state.tokenMethod==="o200k_base"&&state.tokenizerVerified;
     state.source=`⚡ 快取載入（${state.messages.size} 則）`; state.apiMode="cache"; return true;
@@ -207,7 +275,7 @@
 
   function simpleSourceLabel(){
     if(state.loading)return "正在讀取完整對話…";
-    if(state.apiMode==="dom")return "⚠ 僅讀取目前畫面";
+    if(state.apiMode==="dom")return "⚠ 僅讀取部分內容｜數字可能偏低";
     if(state.apiMode==="paged-cache"||state.apiMode==="cache")return "✓ 完整對話已讀取（快取）";
     if(state.apiMode==="paged"||state.apiMode==="legacy")return "✓ 完整對話已讀取";
     return state.messages.size ? "✓ 對話已讀取" : "等待讀取";
@@ -231,14 +299,26 @@
         <div class="jlcm-primary-token">--</div>
         <div class="jlcm-simple-source">等待讀取</div>
         <div class="jlcm-error-simple" hidden></div>
+        <div class="jlcm-first-use" hidden>
+          <strong>第一次使用</strong>
+          <p>這個百分比是長對話參考值，不是 OpenAI 官方 Context 使用率。付費版預設 272k；Free / Go 可從齒輪調整。</p>
+          <button class="jlcm-first-use-ok" type="button">知道了</button>
+        </div>
         <details class="jlcm-about">
           <summary>這個數字怎麼算？</summary>
           <p>以完整可讀的 user / assistant 對話 Token，除以設定的 Context 參考值。這是長對話參考指標，不是 OpenAI 官方或實際 Context 使用率。</p>
         </details>
         <section class="jlcm-settings-panel" hidden>
           <div class="jlcm-settings-title">設定</div>
-          <label>Context 參考值
-            <select class="jlcm-preset"><option value="128k">128k Token</option><option value="272k">272k Token</option><option value="1m">1.05M Token</option><option value="custom">自訂</option></select>
+          <label>使用情境
+            <select class="jlcm-profile">
+              <option value="paid">ChatGPT 付費版 — 272k（建議）</option>
+              <option value="freego">ChatGPT Free / Go — 128k</option>
+              <option value="advanced">進階／自訂</option>
+            </select>
+          </label>
+          <label class="jlcm-advanced-row">進階參考值
+            <select class="jlcm-preset"><option value="1m">1.05M Token</option><option value="custom">自訂</option></select>
           </label>
           <label class="jlcm-custom-row">自訂 Token<input class="jlcm-custom-input" type="number" min="10000" step="1000"></label>
           <button class="jlcm-save" type="button">儲存</button>
@@ -260,16 +340,32 @@
     root.querySelector(".jlcm-refresh").addEventListener("click",fullRefresh);
     root.querySelector(".jlcm-diagnostics").addEventListener("click",copyDiagnostics);
     root.querySelector(".jlcm-clear-cache").addEventListener("click",async()=>{await clearCurrentCache();state.source="快取已清除；正在重新讀取…";updateUI();await fullRefresh();});
-    root.querySelector(".jlcm-preset").addEventListener("change",updateCustomVisibility);
+    root.querySelector(".jlcm-profile").addEventListener("change",updateProfileVisibility);
+    root.querySelector(".jlcm-first-use-ok").addEventListener("click",dismissOnboarding);
+    root.querySelector(".jlcm-preset").addEventListener("change",updateProfileVisibility);
     root.querySelector(".jlcm-save").addEventListener("click",()=>{
-      const contextPreset=root.querySelector(".jlcm-preset").value;
+      const profile=root.querySelector(".jlcm-profile").value;
+      const contextPreset=profile==="paid"?"272k":profile==="freego"?"128k":root.querySelector(".jlcm-preset").value;
       const customContextTokens=Math.max(10000,Number(root.querySelector(".jlcm-custom-input").value)||272000);
       state.config={...state.config,contextPreset,customContextTokens,warnPct:60,handoffPct:75,dangerPct:85};
-      chrome.storage.sync.set(state.config);syncInputs();updateUI();settings.hidden=true;
+      saveSettings();syncInputs();updateUI();settings.hidden=true;
     });
   }
-  function updateCustomVisibility(){const r=document.getElementById(ROOT_ID);if(!r)return;const row=r.querySelector(".jlcm-custom-row");if(row)row.style.display=r.querySelector(".jlcm-preset").value==="custom"?"grid":"none";}
-  function syncInputs(){const r=document.getElementById(ROOT_ID);if(!r)return;r.querySelector(".jlcm-preset").value=state.config.contextPreset;r.querySelector(".jlcm-custom-input").value=state.config.customContextTokens;updateCustomVisibility();}
+  function updateProfileVisibility(){
+    const r=document.getElementById(ROOT_ID);if(!r)return;
+    const profile=r.querySelector(".jlcm-profile").value;
+    const advanced=r.querySelector(".jlcm-advanced-row"),custom=r.querySelector(".jlcm-custom-row");
+    if(advanced)advanced.style.display=profile==="advanced"?"grid":"none";
+    if(custom)custom.style.display=profile==="advanced"&&r.querySelector(".jlcm-preset").value==="custom"?"grid":"none";
+  }
+  function syncInputs(){
+    const r=document.getElementById(ROOT_ID);if(!r)return;
+    const preset=state.config.contextPreset;
+    r.querySelector(".jlcm-profile").value=preset==="272k"?"paid":preset==="128k"?"freego":"advanced";
+    r.querySelector(".jlcm-preset").value=(preset==="1m"||preset==="custom")?preset:"1m";
+    r.querySelector(".jlcm-custom-input").value=state.config.customContextTokens;
+    updateProfileVisibility();
+  }
   function updateUI(){
     ensureUI();const r=document.getElementById(ROOT_ID);if(!r)return;
     const s=getStats(),limit=getContextLimit(),pctRaw=limit?(s.tokens/limit)*100:0,pct=Math.max(0,Math.round(pctRaw)),bar=Math.max(0,Math.min(100,pctRaw)),[label,cls]=statusFor(pctRaw);
@@ -284,10 +380,38 @@
     r.querySelector(".jlcm-token-method").textContent=tokenizerLabel();
     r.querySelector(".jlcm-bar-fill").style.width=`${bar}%`;
     const e=r.querySelector(".jlcm-error-simple");
-    if(state.lastError){e.hidden=false;e.textContent=state.tokenizerRunFailed?"⚠ Tokenizer 暫時改用本機粗估；可在設定的問題排查中複製診斷資訊。":"⚠ 讀取出現問題；可在設定的問題排查中查看診斷資訊。";}else{e.hidden=true;e.textContent="";}
+    if(state.apiMode==="dom"){
+      e.hidden=false;
+      e.textContent="⚠ 目前只能估算畫面中已載入的內容，百分比可能明顯偏低。請稍後按 ↻ 重試。";
+    }else if(state.tokenizerRunFailed){
+      e.hidden=false;
+      e.textContent="⚠ Tokenizer 暫時改用本機粗估，百分比可能有少量誤差。可稍後按 ↻ 重試。";
+    }else if(state.lastError){
+      e.hidden=false;
+      e.textContent="⚠ 最新資料更新失敗，目前先顯示已讀取的結果。可稍後按 ↻ 重試。";
+    }else{
+      e.hidden=true;e.textContent="";
+    }
+
+    const first=r.querySelector(".jlcm-first-use");
+    if(first) first.hidden=!state.onboardingVisible;
     r.querySelector(".jlcm-copy-status").textContent=Date.now()-state.copiedAt<1500?"已複製（不含對話內容與對話 ID）":"";
   }
-  function initSettings(){return new Promise(resolve=>chrome.storage.sync.get(DEFAULTS,items=>{state.config={...DEFAULTS,...items};resolve();}));}
-  async function init(){await initSettings();ensureUI();syncInputs();updateUI();await loadConversationSmart();setInterval(()=>{if(location.href!==state.lastUrl){state.lastUrl=location.href;setTimeout(loadConversationSmart,900);}},800);let debounce=null;const ob=new MutationObserver(()=>{clearTimeout(debounce);debounce=setTimeout(()=>refreshLatestOnly(false),2500);});ob.observe(document.documentElement,{subtree:true,childList:true,characterData:true});}
+  async function init(){
+    await initSettings();
+    ensureUI();
+    syncInputs();
+    const root=document.getElementById(ROOT_ID);
+    if(state.onboardingVisible&&root){
+      const panel=root.querySelector(".jlcm-panel");
+      if(panel)panel.hidden=false;
+    }
+    updateUI();
+    await loadConversationSmart();
+    setInterval(()=>{if(location.href!==state.lastUrl){state.lastUrl=location.href;setTimeout(loadConversationSmart,900);}},800);
+    let debounce=null;
+    const ob=new MutationObserver(()=>{clearTimeout(debounce);debounce=setTimeout(()=>refreshLatestOnly(false),2500);});
+    ob.observe(document.documentElement,{subtree:true,childList:true,characterData:true});
+  }
   init();
 })();

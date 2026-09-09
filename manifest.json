@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChatGPT Context Meter",
-  "version": "0.6.0",
+  "version": "1.0.0",
   "description": "簡潔顯示 ChatGPT 長對話的 Context 參考百分比；使用完整歷史與本機 o200k_base tokenizer。",
   "permissions": [
     "storage"
