@@ -17,3 +17,48 @@
 #jl-context-meter-root-v06 .jlcm-settings-panel{margin-top:12px;padding:12px;border-radius:12px;background:rgba(0,0,0,.035);font-size:11px}#jl-context-meter-root-v06 .jlcm-settings-title{margin-bottom:8px;font-weight:800;font-size:12px}#jl-context-meter-root-v06 .jlcm-settings-panel label{display:grid;grid-template-columns:1fr 112px;gap:8px;align-items:center;margin-top:8px}#jl-context-meter-root-v06 .jlcm-settings-panel select,#jl-context-meter-root-v06 .jlcm-settings-panel input{width:112px;border:1px solid rgba(0,0,0,.16);border-radius:8px;padding:6px 7px;background:#fff;color:#111}#jl-context-meter-root-v06 .jlcm-save{width:100%;margin-top:10px;border:0;border-radius:8px;padding:7px 9px;background:#242424;color:#fff;font-weight:800;cursor:pointer}#jl-context-meter-root-v06 .jlcm-troubleshoot{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}#jl-context-meter-root-v06 .jlcm-troubleshoot summary{cursor:pointer;font-weight:700;color:#666}#jl-context-meter-root-v06 .jlcm-tools{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}#jl-context-meter-root-v06 .jlcm-tools button{border:1px solid rgba(0,0,0,.13);border-radius:8px;padding:7px 5px;background:#fff;color:#333;cursor:pointer;font-size:10px;font-weight:700}#jl-context-meter-root-v06 .jlcm-copy-status{min-height:13px;margin-top:4px;text-align:right;font-size:9px;color:var(--ok)}#jl-context-meter-root-v06 .jlcm-techline{margin-top:5px;font-size:9px;color:#999;overflow-wrap:anywhere}
 #jl-context-meter-root-v06 .jlcm-footnote{margin-top:12px;text-align:center;font-size:9.5px;color:#999}#jl-context-meter-root-v06 .jlcm-version{margin-top:4px;text-align:right;font-size:8.5px;color:#bbb}
 @media(max-height:760px){#jl-context-meter-root-v06{bottom:66px}#jl-context-meter-root-v06 .jlcm-panel{bottom:44px;max-height:calc(100vh - 122px)}}@media(max-width:640px){#jl-context-meter-root-v06{right:10px;bottom:76px}#jl-context-meter-root-v06 .jlcm-panel{width:min(330px,calc(100vw - 20px));max-height:calc(100vh - 126px)}}
+
+#jl-context-meter-root-v06 .jlcm-probe-status{
+  margin-top:6px;
+  font-size:11px;
+  line-height:1.35;
+  opacity:.78;
+}
+
+#jl-context-meter-root-v06 .jlcm-classification-status{
+  margin-top:6px;
+  font-size:11px;
+  line-height:1.4;
+  opacity:.82;
+}
+
+/* v1.2.7 UI focus: keep attention on the main Context percentage. */
+#jl-context-meter-root-v06 .jlcm-breakdown{
+  margin-top:7px;
+  display:grid;
+  gap:2px;
+  font-size:10px;
+  line-height:1.35;
+  color:#929292;
+  font-weight:500;
+}
+#jl-context-meter-root-v06 .jlcm-breakdown>div{
+  display:flex;
+  justify-content:center;
+  align-items:baseline;
+  gap:6px;
+}
+#jl-context-meter-root-v06 .jlcm-breakdown-label{
+  min-width:45px;
+  text-align:right;
+  color:#9a9a9a;
+}
+#jl-context-meter-root-v06 .jlcm-breakdown-text,
+#jl-context-meter-root-v06 .jlcm-breakdown-tool{
+  min-width:96px;
+  text-align:left;
+  font-variant-numeric:tabular-nums;
+}
+#jl-context-meter-root-v06 .jlcm-simple-source{
+  margin-top:6px;
+}

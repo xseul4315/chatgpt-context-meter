@@ -1,3 +1,58 @@
+# v1.2.7
+
+- 主畫面聚焦 Context 已使用百分比，顯示至小數 1 位。
+- 新增較小字體的「對話正文」與「工具歷史」Token／占比拆分。
+- 正式採用完整可讀 conversation history 作為 Context Load 參考值。
+- 移除 Accuracy / Deep Stream Probe UI、MAIN-world probe 注入與相關診斷欄位。
+- 保留複製診斷資訊、清除此對話快取、Tokenizer 與讀取狀態。
+- 保留 v1.1.4 Instant Switch、cache restore 與背景同步行為。
+
+# v1.2.4-classification-fix-test
+
+- 不再用 reasoning_status 作為硬排除條件。
+- Accuracy 對照改為原算法 / 較可信 final / 高可信 final / 特殊中介四項。
+- 主畫面算法不變。
+
+# v1.2.2-classification-send-probe-test
+
+- 新增 message classification diagnostics。
+- 同時計算現行 history tokens 與保守 final-text tokens。
+- Cache schema 升至 4，首次強制重建 classification metadata。
+- Probe 改為 Send-only POST/stream tracing，排除 GET conversation history。
+
+# v1.2.1-targeted-stream-probe-test
+
+- Targeted stream/request/response tracing。
+- 記錄 endpoint、key tree、SSE/event type 與 model/token/context metadata。
+- 不改主百分比公式。
+
+# v1.2.0-accuracy-probe-test
+
+- 新增手動 60 秒 Accuracy Probe。
+- MAIN-world 被動觀察 ChatGPT backend / XHR / stream 的 usage/context/model/token metadata。
+- 不改主百分比公式，不保存聊天本文。
+- Probe 結果只存在頁面記憶體並可加入診斷資訊。
+
+# v1.1.4-final-test
+
+- 背景最新頁同步改為 silent reconciliation。
+- 新增 background refresh lock 與 MutationObserver 去重。
+- 移除重複 pointerdown listener。
+- 診斷新增 display_ms / background_sync_ms。
+
+# v1.1.3-trace-test
+
+- 新增對話切換 Performance Trace。
+- 不變更 Context 計算公式。
+- 用於定位 40% 長對話約 3 秒切換延遲。
+
+# v1.1.0-test
+
+- Instant Switch：快取先顯示、最新頁背景校正。
+- SPA 路由切換偵測加速。
+- 最新頁改為增量 tokenizer。
+- 新增 message fingerprint 與切換競態保護。
+
 # Changelog
 
 ## v1.0.0
